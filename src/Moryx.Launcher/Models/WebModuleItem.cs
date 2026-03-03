@@ -6,7 +6,7 @@ namespace Moryx.Launcher; // TODO: move to ns *.Models in the next major
 /// <summary>
 /// Contains properties holding related information of a WebModule to process in the Shell
 /// </summary>
-public class WebModuleItem : ModuleItem
+internal class WebModuleItem : ModuleItem
 {
     /// <summary>
     /// Optional URL to an event stream

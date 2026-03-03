@@ -5,7 +5,7 @@ using Moryx.Modules;
 
 namespace Moryx.Launcher; // TODO: move to ns *.Models in the next major
 
-public class ModuleItem
+internal class ModuleItem
 {
     /// <summary>
     ///  Unique route of the module
