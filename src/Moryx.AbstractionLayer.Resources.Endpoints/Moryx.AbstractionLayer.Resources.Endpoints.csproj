@@ -32,5 +32,9 @@
       <DependentUpon>Strings.resx</DependentUpon>
     </Compile>
   </ItemGroup>
+  
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moryx.AbstractionLayer.Resources.Endpoints.Tests" />
+  </ItemGroup>
 
 </Project>
