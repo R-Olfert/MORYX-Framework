@@ -181,20 +181,42 @@ internal class AutoConfigurator
         if (config is not IPropertyMappedConfiguration propertyMapperConfig)
             return config;
 
-        var remainingColumns = typeof(IGenericColumns).GetProperties()
-            .OrderBy(p => p.Name).ToList();
 
+        var jsonColumn = (config as IGenericMapperConfiguration)?.JsonColumn;
+
+        //var remainingColumns = typeof(IGenericColumns).GetProperties()
+        //    .OrderBy(p => p.Name).ToList();
+        
+        var remainingColumns = typeof(IGenericColumns)
+            .GetProperties()
+            .Where(p => string.IsNullOrEmpty(jsonColumn) ||
+                        !string.Equals(p.Name, jsonColumn, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Name)
+            .ToList();
+        
         var baseTypeWrapper = Storage.GetTypeWrapper(typeof(TBaseType).FullName);
         var baseProperties = baseTypeWrapper != null ? baseTypeWrapper.Properties.ToArray() : typeof(TBaseType).GetProperties();
 
         var targetTypeWrapper = Storage.GetTypeWrapper(targetType.FullName);
         var targetProperties = targetTypeWrapper != null ? targetTypeWrapper.Properties.ToArray() : targetType.GetProperties();
+        //var filteredProperties = targetProperties
+        //    .Where(p => baseProperties.All(bp => bp.Name != p.Name))
+        //    .Where(p => p.GetSetMethod() != null)
+        //    .Where(p => !typeof(ProductPartLink).IsAssignableFrom(p.PropertyType) & !typeof(IEnumerable<ProductPartLink>).IsAssignableFrom(p.PropertyType))
+        //    .Where(p => !typeof(ProductInstance).IsAssignableFrom(p.PropertyType) & !typeof(IEnumerable<ProductInstance>).IsAssignableFrom(p.PropertyType))
+        //    .ToList();
+
         var filteredProperties = targetProperties
             .Where(p => baseProperties.All(bp => bp.Name != p.Name))
             .Where(p => p.GetSetMethod() != null)
-            .Where(p => !typeof(ProductPartLink).IsAssignableFrom(p.PropertyType) & !typeof(IEnumerable<ProductPartLink>).IsAssignableFrom(p.PropertyType))
-            .Where(p => !typeof(ProductInstance).IsAssignableFrom(p.PropertyType) & !typeof(IEnumerable<ProductInstance>).IsAssignableFrom(p.PropertyType))
+            .Where(p => !typeof(ProductPartLink).IsAssignableFrom(p.PropertyType))
+            .Where(p => !typeof(IEnumerable<ProductPartLink>).IsAssignableFrom(p.PropertyType))
+            .Where(p => !typeof(ProductInstance).IsAssignableFrom(p.PropertyType))
+            .Where(p => !typeof(IEnumerable<ProductInstance>).IsAssignableFrom(p.PropertyType))
+            .Where(p => string.IsNullOrEmpty(jsonColumn) ||
+                        !string.Equals(p.Name, jsonColumn, StringComparison.OrdinalIgnoreCase))
             .ToList();
+
 
         foreach (var property in filteredProperties)
         {
