@@ -18,7 +18,6 @@ public class GenericJsonTestProductType : ProductType
         return new GenericJsonTestProductTypeInstance();
     }
 
-
     [Description("Sample Int 1")]
     [DefaultValue(1)]
     public int Integer1 { get; set; }
@@ -58,7 +57,6 @@ public class GenericJsonTestProductType : ProductType
     [Description("Sample Int 10")]
     [DefaultValue(10)]
     public int Integer10 { get; set; }
-
 
     [Description("Sample float 1")]
     [DefaultValue(1.1)]

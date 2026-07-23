@@ -42,26 +42,19 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         var baseProperties = typeof(TBase).GetProperties().Select(p => p.Name).ToArray();
 
         //FMÖ: 22 07 2026
-        //var configuredProperties = config.PropertyConfigs.Select(cm => cm.PropertyName);
         var configuredProperties = config.PropertyConfigs
             .Select(cm => cm.PropertyName)
             .Where(p => !string.Equals(p, config.JsonColumn, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-
         var readOnlyProperties = concreteType.GetProperties()
             .Where(p => p.GetSetMethod() == null).Select(p => p.Name).ToArray();
 
         //FMÖ: 22 07 2026
-        // The json should not contain base, configured nor readonly properties
-        //var jsonIgnoredProperties = baseProperties
-        //    .Concat(configuredProperties)
-        //    .Concat(readOnlyProperties).ToArray();
         var jsonIgnoredProperties = baseProperties
             .Concat(configuredProperties)
             .Concat(readOnlyProperties)
             .ToArray();
-
 
         _jsonSettings = JsonSettings.Minimal
             .Overwrite(j => j.ContractResolver = new DifferentialContractResolver<TReference>(jsonIgnoredProperties));
@@ -71,14 +64,11 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
             .Concat(readOnlyProperties).ToArray();
 
         //FMÖ: 22 07 2026
-        //_configuredMappers = config.PropertyConfigs.Where(pc => !mapperIgnoredProperties.Contains(pc.PropertyName))
-        //    .Select(pc => MapperFactory.Create(pc, concreteType)).ToArray();
         _configuredMappers = config.PropertyConfigs
             .Where(pc => !mapperIgnoredProperties.Contains(pc.PropertyName))
             .Where(pc => !string.Equals(pc.PropertyName, config.JsonColumn, StringComparison.OrdinalIgnoreCase))
             .Select(pc => MapperFactory.Create(pc, concreteType))
             .ToArray();
-
     }
 
     public bool HasChanged(IGenericColumns storage, object instance)
@@ -139,21 +129,6 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         return Expression.Lambda(body, columnParam) as Expression<Func<IGenericColumns, bool>>;
     }
 
-    //public void ReadValue(IGenericColumns source, object target)
-    //{
-    //    // Use all configured mappers
-    //    var properties = source;
-    //    foreach (var mapper in _configuredMappers)
-    //    {
-    //        mapper.ReadValue(properties, target);
-    //    }
-
-    //    // Fill the rest from JSON
-    //    var json = _jsonAccessor.ReadProperty(source);
-    //    if (!string.IsNullOrEmpty(json))
-    //        JsonConvert.PopulateObject(json, target, _jsonSettings);
-
-    //}
     /// <summary>
     /// 
     /// </summary>
@@ -175,7 +150,9 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         // Reading JSON from the JsonColumn
         var json = _jsonAccessor.ReadProperty(source);
         if (string.IsNullOrWhiteSpace(json))
+        {
             return;
+        }
 
         // JsonColumn must contain valid JSON
         var trimmed = json.Trim();
@@ -198,19 +175,6 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
                 $"Stored value: '{json}'", ex);
         }
     }
-
-    //public void WriteValue(object source, IGenericColumns target)
-    //{
-    //    // Convert and write JSON
-    //    var json = JsonConvert.SerializeObject(source, _jsonSettings);
-    //    _jsonAccessor.WriteProperty(target, json);
-
-    //    // Execute property mappers
-    //    foreach (var mapper in _configuredMappers)
-    //    {
-    //        mapper.WriteValue(source, target);
-    //    }
-    //}
     
     /// <summary>
     /// Also write null-values to the JSON
@@ -229,7 +193,6 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
             mapper.WriteValue(source, target);
         }
 
-
         // Generate JSON from the rest of the object
         var mappedNames = _configuredMappers
             .Select(m => m.Property.Name)
@@ -241,19 +204,27 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         foreach (var prop in source.GetType().GetProperties())
         {
             if (!prop.CanRead)
+            {
                 continue;
+            }
 
             // Do not include base, read-only, or directly mapped properties in the JSON
             if (mappedNames.Contains(prop.Name))
+            {
                 continue;
+            }
 
             // jump Indexer 
             if (prop.GetIndexParameters().Length > 0)
+            {
                 continue;
+            }
 
             // jump Read-only Props
             if (prop.GetSetMethod() == null)
+            {
                 continue;
+            }
 
             var value = prop.GetValue(source);
 
@@ -275,14 +246,18 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
     private static bool IsDefaultOrNull(Type propertyType, object value)
     {
         if (value == null)
+        {
             return true;
+        }
 
         var underlyingType = Nullable.GetUnderlyingType(propertyType);
         var effectiveType = underlyingType ?? propertyType;
 
         // Reference type
         if (!effectiveType.IsValueType)
+        {
             return false;
+        }
 
         // Value type: handle Default as "not set yet"
         var defaultValue = Activator.CreateInstance(effectiveType);

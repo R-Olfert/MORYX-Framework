@@ -40,8 +40,10 @@ internal class AutoConfigurator
         var productTypes = ReflectionTool.GetPublicClasses<ProductType>();
         var product = productTypes.FirstOrDefault(p => p.FullName == productType);
         if (product == null)
+        {
             return $"Found no product type {productType ?? string.Empty}!\n" +
                    "Available types: " + string.Join(", ", productTypes.Select(t => t.FullName));
+        }
 
         var result = string.Empty;
         // First try to select the best type strategy
@@ -78,7 +80,10 @@ internal class AutoConfigurator
             {
                 var linkType = link.PropertyType;
                 if (typeof(IEnumerable<ProductPartLink>).IsAssignableFrom(linkType))
+                {
                     linkType = linkType.GetGenericArguments()[0];
+                }
+
                 var linkConfig = StrategyConfig<IProductLinkStrategy, ProductLinkConfiguration, ProductPartLink>(linkType);
                 if (linkConfig == null)
                 {
@@ -105,8 +110,10 @@ internal class AutoConfigurator
         var types = ReflectionTool.GetPublicClasses<ProductInstance>();
         var instance = types.FirstOrDefault(p => p.FullName == instanceType);
         if (instance == null)
+        {
             return $"Found no instance type {instanceType ?? string.Empty}!\n" +
                    "Available types: " + string.Join(", ", types.Select(t => t.FullName));
+        }
 
         var result = string.Empty;
         if (Config.InstanceStrategies.Any(s => s.TargetType == instanceType))
@@ -138,8 +145,10 @@ internal class AutoConfigurator
         var types = ReflectionTool.GetPublicClasses<IProductRecipe>();
         var recipe = types.FirstOrDefault(p => p.FullName == recipeType);
         if (recipe == null)
+        {
             return $"Found no recipe type {recipeType ?? string.Empty}!\n" +
                    "Available types: " + string.Join(", ", types.Select(t => t.FullName));
+        }
 
         var result = string.Empty;
         if (Config.RecipeStrategies.Any(s => s.TargetType == recipeType))
@@ -169,7 +178,9 @@ internal class AutoConfigurator
     {
         var tuple = CreateConfig<TStrategy, TConfig>(targetType);
         if (tuple == null)
+        {
             return null;
+        }
 
         var config = tuple.Item2;
         config.TargetType = targetType.FullName;
@@ -179,13 +190,11 @@ internal class AutoConfigurator
 
         // Optionally try to configure property mappers
         if (config is not IPropertyMappedConfiguration propertyMapperConfig)
+        {
             return config;
-
+        }
 
         var jsonColumn = (config as IGenericMapperConfiguration)?.JsonColumn;
-
-        //var remainingColumns = typeof(IGenericColumns).GetProperties()
-        //    .OrderBy(p => p.Name).ToList();
         
         var remainingColumns = typeof(IGenericColumns)
             .GetProperties()
@@ -195,16 +204,10 @@ internal class AutoConfigurator
             .ToList();
         
         var baseTypeWrapper = Storage.GetTypeWrapper(typeof(TBaseType).FullName);
-        var baseProperties = baseTypeWrapper != null ? baseTypeWrapper.Properties.ToArray() : typeof(TBaseType).GetProperties();
+        var baseProperties = baseTypeWrapper?.Properties.ToArray() ?? typeof(TBaseType).GetProperties();
 
         var targetTypeWrapper = Storage.GetTypeWrapper(targetType.FullName);
-        var targetProperties = targetTypeWrapper != null ? targetTypeWrapper.Properties.ToArray() : targetType.GetProperties();
-        //var filteredProperties = targetProperties
-        //    .Where(p => baseProperties.All(bp => bp.Name != p.Name))
-        //    .Where(p => p.GetSetMethod() != null)
-        //    .Where(p => !typeof(ProductPartLink).IsAssignableFrom(p.PropertyType) & !typeof(IEnumerable<ProductPartLink>).IsAssignableFrom(p.PropertyType))
-        //    .Where(p => !typeof(ProductInstance).IsAssignableFrom(p.PropertyType) & !typeof(IEnumerable<ProductInstance>).IsAssignableFrom(p.PropertyType))
-        //    .ToList();
+        var targetProperties = targetTypeWrapper?.Properties.ToArray() ?? targetType.GetProperties();
 
         var filteredProperties = targetProperties
             .Where(p => baseProperties.All(bp => bp.Name != p.Name))
@@ -217,12 +220,13 @@ internal class AutoConfigurator
                         !string.Equals(p.Name, jsonColumn, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-
         foreach (var property in filteredProperties)
         {
             var propertyTuple = CreateConfig<IPropertyMapper, PropertyMapperConfig>(property.PropertyType);
             if (propertyTuple == null)
+            {
                 continue;
+            }
 
             var strategy = propertyTuple.Item1;
             var propertyConfig = propertyTuple.Item2;
@@ -232,7 +236,9 @@ internal class AutoConfigurator
             var columnType = strategy.GetCustomAttribute<PropertyStrategyConfigurationAttribute>()?.ColumnType ?? typeof(string);
             var column = remainingColumns.FirstOrDefault(rc => rc.PropertyType == columnType);
             if (column == null)
+            {
                 continue;
+            }
 
             remainingColumns.Remove(column);
             propertyConfig.Column = column.Name;
@@ -249,7 +255,9 @@ internal class AutoConfigurator
         var strategies = Container.GetRegisteredImplementations(typeof(TStrategy));
         var typeStrategy = SelectStrategy(strategies, targetType);
         if (typeStrategy == null)
+        {
             return null;
+        }
 
         var configType = typeStrategy.GetCustomAttribute<ExpectedConfigAttribute>()?.ExpectedConfigType
                          ?? typeof(TConfig);

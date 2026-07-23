@@ -55,14 +55,12 @@ public class GenericJsonTestProductTypeImporter : ProductImporterBase<GenericJso
             Float10 = 10.11f
         };
 
-
         var result = new ProductImporterResult
         {
             ImportedTypes = [product]
         };
 
         return result;
-
     }
 }
 
