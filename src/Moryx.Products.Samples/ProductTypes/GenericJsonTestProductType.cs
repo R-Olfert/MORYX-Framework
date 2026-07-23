@@ -137,4 +137,5 @@ public class GenericJsonTestProductType : ProductType
     [Description("Sample Text 10")]
     [DefaultValue("Text 10")]
     public string Text10 { get; set; }
+
 }
