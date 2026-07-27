@@ -60,7 +60,7 @@ public class GenericJsonTestProductType : ProductType
 
     [Description("Sample float 1")]
     [DefaultValue(1.1)]
-    public float Float1 { get; set; }
+    public double Float1 { get; set; }
 
     [Description("Sample float 2")]
     [DefaultValue(2.1)]
@@ -92,7 +92,7 @@ public class GenericJsonTestProductType : ProductType
 
     [Description("Sample float 9")]
     [DefaultValue(9.1)]
-    public float Float9 { get; set; }
+    public double Float9 { get; set; }
 
     [Description("Sample float 10")]
     [DefaultValue(10.1)]

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Moryx.Tools;
 
@@ -136,7 +137,27 @@ internal class ConversionAccessor<TConcrete, TBase, TProperty, TValue> : Propert
     public TValue ReadProperty(TBase instance)
     {
         var value = (object)PropertyGetter((TConcrete)instance);
-        return (TValue)(value is TValue ? value : Convert.ChangeType(value, typeof(TValue)));
+        //return (TValue)(value is TValue ? value : Convert.ChangeType(value, typeof(TValue)));
+        TValue response;
+        if (value is TValue)
+        {
+            response = (TValue)value;
+        }
+        else
+        {
+            var type = value.GetType();
+            if (type.Name.Equals("Single"))
+            {
+                var temp = $"{value}";
+                var temp2 = double.Parse(temp);
+                response = (TValue)Convert.ChangeType(temp2, typeof(TValue));
+            }
+            else
+            {
+                response = (TValue)Convert.ChangeType(value, typeof(TValue));
+            }
+        }
+        return response;
     }
 
     public void WriteProperty(TBase instance, TValue value)
