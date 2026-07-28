@@ -134,7 +134,38 @@ public class ProductStorageTests
                     TargetType = typeof(WatchPackageType).FullName,
                     JsonColumn = nameof(IGenericColumns.Text8),
                     PropertyConfigs = []
-                }
+                },
+
+                new GenericTypeConfiguration
+                {
+                    TargetType = typeof(GenericJsonTestProductType).FullName,
+                    JsonColumn = nameof(IGenericColumns.Text8),
+                    PropertyConfigs = []
+                },
+
+                new GenericTypeConfiguration
+                {
+                    TargetType = typeof(TextColumnMapperTestProductType).FullName,
+
+                    JsonColumn = nameof(IGenericColumns.Text8),
+
+                    PropertyConfigs =
+                    [
+                        new PropertyMapperConfig
+                        {
+                            PropertyName = nameof(TextColumnMapperTestProductType.Integer1),
+                            Column = nameof(IGenericColumns.Integer1),
+                            PluginName = nameof(IntegerColumnMapper)
+                        },
+
+                        new PropertyMapperConfig
+                        {
+                            PropertyName = nameof(TextColumnMapperTestProductType.Text1),
+                            Column = nameof(IGenericColumns.Text1),
+                            PluginName = nameof(TextColumnMapper)
+                        }
+                    ]
+                },
             ],
             InstanceStrategies =
             [
@@ -951,5 +982,115 @@ public class ProductStorageTests
         Assert.That(byType4.Count, Is.GreaterThanOrEqualTo(1));
         Assert.That(byType5.Count, Is.GreaterThanOrEqualTo(1));
         Assert.That(byType6.Count, Is.GreaterThanOrEqualTo(1));
+    }
+
+
+    [Test(Description = "Additional properties that exceed the configured generic columns must be stored in the JsonColumn and restored correctly.")]
+    public async Task SaveAndLoadGenericJsonType()
+    {
+        // Arrange
+        var product = new GenericJsonTestProductType
+        {
+            Name = "JsonTest",
+            Identity = new ProductIdentity("900001", 1),
+
+            Integer9 = 99,
+            Integer10 = 100,
+
+            Float9 = 9.9,
+            Float10 = 10.1f,
+
+            Text8 = "Text8Value",
+            Text9 = "Text9Value",
+            Text10 = "Text10Value"
+        };
+
+        // Act
+        var id = await _storage.SaveTypeAsync(product);
+        var loaded = (GenericJsonTestProductType)await _storage.LoadTypeAsync(id);
+
+        // Assert
+        Assert.That(loaded.Integer9, Is.EqualTo(product.Integer9));
+        Assert.That(loaded.Integer10, Is.EqualTo(product.Integer10));
+
+        Assert.That(loaded.Float9, Is.EqualTo(product.Float9));
+        Assert.That(loaded.Float10, Is.EqualTo(product.Float10));
+
+        Assert.That(loaded.Text8, Is.EqualTo(product.Text8));
+        Assert.That(loaded.Text9, Is.EqualTo(product.Text9));
+        Assert.That(loaded.Text10, Is.EqualTo(product.Text10));
+    }
+
+    [Test(Description = "Complex properties mapped through TextColumnMapper must be serialized and restored correctly.")]
+    public async Task SaveAndLoadComplexProperty()
+    {
+        // Arrange
+        var product = new TextColumnMapperTestProductType
+        {
+            Name = "ComplexDataTest",
+            Identity = new ProductIdentity("900002", 1),
+
+            Integer1 = 42,
+            Float1 = 123.456,
+            Text1 = "RootText",
+
+            ComplexData1 = new ComplexData
+            {
+                Content = "Content1",
+                PropertyName = "Property1",
+                Number = 11,
+                Weight = 12.5f
+            },
+
+            ComplexData2 = new ComplexData
+            {
+                Content = "Content2",
+                PropertyName = "Property2",
+                Number = 22,
+                Weight = 23.5f
+            }
+        };
+
+        // Act
+        var id = await _storage.SaveTypeAsync(product);
+        var loaded = (TextColumnMapperTestProductType)await _storage.LoadTypeAsync(id);
+
+        // Assert
+        Assert.That(loaded.ComplexData1, Is.Not.Null);
+        Assert.That(loaded.ComplexData1.Content, Is.EqualTo(product.ComplexData1.Content));
+        Assert.That(loaded.ComplexData1.PropertyName, Is.EqualTo(product.ComplexData1.PropertyName));
+        Assert.That(loaded.ComplexData1.Number, Is.EqualTo(product.ComplexData1.Number));
+        Assert.That(loaded.ComplexData1.Weight, Is.EqualTo(product.ComplexData1.Weight));
+
+        Assert.That(loaded.ComplexData2, Is.Not.Null);
+        Assert.That(loaded.ComplexData2.Content, Is.EqualTo(product.ComplexData2.Content));
+        Assert.That(loaded.ComplexData2.PropertyName, Is.EqualTo(product.ComplexData2.PropertyName));
+        Assert.That(loaded.ComplexData2.Number, Is.EqualTo(product.ComplexData2.Number));
+        Assert.That(loaded.ComplexData2.Weight, Is.EqualTo(product.ComplexData2.Weight));
+    }
+
+
+    [Test(Description = "Loading products with null complex properties must not throw an ArgumentNullException.")]
+    public async Task SaveAndLoadTypeWithNullComplexProperty()
+    {
+        // Arrange
+        var product = new TextColumnMapperTestProductType
+        {
+            Name = "NullComplex",
+            Identity = new ProductIdentity("900003", 1),
+
+            ComplexData1 = null,
+            ComplexData2 = null
+        };
+
+        var id = await _storage.SaveTypeAsync(product);
+
+        // Act
+        var loaded =
+            (TextColumnMapperTestProductType)await _storage.LoadTypeAsync(id);
+
+        // Assert
+        Assert.That(loaded.ComplexData1, Is.Null);
+        Assert.That(loaded.ComplexData2, Is.Null);
     }
 }
