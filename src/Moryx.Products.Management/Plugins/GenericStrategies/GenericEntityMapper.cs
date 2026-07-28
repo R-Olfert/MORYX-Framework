@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 
 using System.Linq.Expressions;
+using Microsoft.Extensions.Logging;
 using Moryx.Container;
 using Moryx.Products.Management.Model;
 using Moryx.Serialization;
@@ -27,7 +28,10 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
     /// </summary>
     public IPropertyMapperFactory MapperFactory { get; set; }
 
+    public ILogger Logger { get; set; }
+
     private IPropertyMapper[] _configuredMappers;
+
 
     private JsonSerializerSettings _jsonSettings;
 
@@ -41,7 +45,17 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
 
         var baseProperties = typeof(TBase).GetProperties().Select(p => p.Name).ToArray();
 
-        //FMÖ: 22 07 2026
+        // are the any old Property configs, which use "Text8" as JSON and normal string at the same time?
+        if (config.PropertyConfigs.Any(pc =>
+                string.Equals(pc.PropertyName, config.JsonColumn,
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            Logger?.LogWarning(
+                "Detected a PropertyConfig for JsonColumn '{JsonColumn}'. " +
+                "The regular property mapping will be ignored.",
+                config.JsonColumn);
+        }
+
         var configuredProperties = config.PropertyConfigs
             .Select(cm => cm.PropertyName)
             .Where(p => !string.Equals(p, config.JsonColumn, StringComparison.OrdinalIgnoreCase))
@@ -50,7 +64,6 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         var readOnlyProperties = concreteType.GetProperties()
             .Where(p => p.GetSetMethod() == null).Select(p => p.Name).ToArray();
 
-        //FMÖ: 22 07 2026
         var jsonIgnoredProperties = baseProperties
             .Concat(configuredProperties)
             .Concat(readOnlyProperties)
@@ -63,7 +76,6 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         var mapperIgnoredProperties = baseProperties
             .Concat(readOnlyProperties).ToArray();
 
-        //FMÖ: 22 07 2026
         _configuredMappers = config.PropertyConfigs
             .Where(pc => !mapperIgnoredProperties.Contains(pc.PropertyName))
             .Where(pc => !string.Equals(pc.PropertyName, config.JsonColumn, StringComparison.OrdinalIgnoreCase))
@@ -113,7 +125,7 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
                     }
 
                     callValue = ExtractExpressionValue(call.Arguments.First());
-                    return Convert(((MemberExpression)call.Object)?.Member.Name, ExpressionType.Equal, callValue);
+                    return Convert(((MemberExpression)call.Object).Member.Name, ExpressionType.Equal, callValue);
                 }
                 break;
         }
@@ -129,13 +141,7 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         return Expression.Lambda(body, columnParam) as Expression<Func<IGenericColumns, bool>>;
     }
 
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="source"></param>
-    /// <param name="target"></param>
-    /// <exception cref="ArgumentNullException"></exception>
-    /// <exception cref="InvalidOperationException"></exception>
+    /// <inheritdoc />
     public void ReadValue(IGenericColumns source, object target)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -175,13 +181,8 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
                 $"Stored value: '{json}'", ex);
         }
     }
-    
-    /// <summary>
-    /// Also write null-values to the JSON
-    /// </summary>
-    /// <param name="source"></param>
-    /// <param name="target"></param>
-    /// <exception cref="ArgumentNullException"></exception>
+
+    /// <inheritdoc/>>
     public void WriteValue(object source, IGenericColumns target)
     {
         ArgumentNullException.ThrowIfNull(source);
