@@ -145,17 +145,19 @@ internal class ConversionAccessor<TConcrete, TBase, TProperty, TValue> : Propert
         }
         else
         {
-            var type = value.GetType();
-            if (type.Name.Equals("Single"))
+            if (value != null)
             {
-                var temp = $"{value}";
-                var temp2 = double.Parse(temp);
-                response = (TValue)Convert.ChangeType(temp2, typeof(TValue));
+                var type = value.GetType();
+
+                if (type.Name.Equals("Single"))
+                {
+                    var temp = $"{value}";
+                    var temp2 = double.Parse(temp);
+                    response = (TValue)Convert.ChangeType(temp2, typeof(TValue));
+                    return response;
+                }
             }
-            else
-            {
-                response = (TValue)Convert.ChangeType(value, typeof(TValue));
-            }
+            response = (TValue)Convert.ChangeType(value, typeof(TValue));
         }
         return response;
     }
