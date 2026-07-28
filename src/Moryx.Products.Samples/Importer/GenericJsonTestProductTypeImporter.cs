@@ -66,6 +66,4 @@ public class GenericJsonTestProductTypeImporter : ProductImporterBase<GenericJso
 
 public class SpecializedJsonTestProductTypeParameters : PrototypeParameters
 {
-    //[Required]
-    //public string Test { get; set; }
 }

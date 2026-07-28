@@ -72,10 +72,7 @@ internal class TextColumnMapper : ColumnMapper<string>
         // Complex reference types -> JSON
         if ((propType.IsClass || propType.IsInterface) && propType != typeof(string))
         {
-            if (value == null)
-                return null;
-
-            return JsonConvert.SerializeObject(value, Property.PropertyType, JsonSettings.Minimal);
+            return value == null ? null : JsonConvert.SerializeObject(value, Property.PropertyType, JsonSettings.Minimal);
         }
 
         // Normal string / primitive conversion
