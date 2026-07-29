@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0
 
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 namespace Moryx.Tools;
 
@@ -24,14 +23,22 @@ internal abstract class PropertyAccessor<TConcrete, TProperty>
         Property = property;
 
         if (property.CanRead)
+        {
             PropertyGetter = (Func<TConcrete, TProperty>)Delegate.CreateDelegate(typeof(Func<TConcrete, TProperty>), property.GetMethod);
+        }
         else
+        {
             PropertyGetter = EmptyGetter;
+        }
 
         if (property.CanWrite)
+        {
             PropertySetter = (Action<TConcrete, TProperty>)Delegate.CreateDelegate(typeof(Action<TConcrete, TProperty>), property.SetMethod);
+        }
         else
+        {
             PropertySetter = EmptySetter;
+        }
     }
 
     private static TProperty EmptyGetter(TConcrete instance) => default(TProperty);
@@ -137,11 +144,10 @@ internal class ConversionAccessor<TConcrete, TBase, TProperty, TValue> : Propert
     public TValue ReadProperty(TBase instance)
     {
         var value = (object)PropertyGetter((TConcrete)instance);
-        //return (TValue)(value is TValue ? value : Convert.ChangeType(value, typeof(TValue)));
         TValue response;
-        if (value is TValue)
+        if (value is TValue value1)
         {
-            response = (TValue)value;
+            response = value1;
         }
         else
         {
@@ -153,10 +159,14 @@ internal class ConversionAccessor<TConcrete, TBase, TProperty, TValue> : Propert
 
     public void WriteProperty(TBase instance, TValue value)
     {
-        // Check if the value can be casted or needs conversion
+        // Check if the value can be cast or needs conversion
         if (value is TProperty)
+        {
             PropertySetter((TConcrete)instance, (TProperty)(object)value);
+        }
         else
+        {
             PropertySetter((TConcrete)instance, (TProperty)Convert.ChangeType(value, typeof(TProperty)));
+        }
     }
 }
