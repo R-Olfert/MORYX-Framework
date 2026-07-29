@@ -1093,4 +1093,68 @@ public class ProductStorageTests
         Assert.That(loaded.ComplexData1, Is.Null);
         Assert.That(loaded.ComplexData2, Is.Null);
     }
+
+    /// <summary>
+    /// Should be obsolete in Moryx 12 because the double use of TEXT8-Column should be eliminated
+    /// </summary>
+    /// <returns></returns>
+    [Test(Description = "If Text8 column contains plain text no exception should be thrown")]
+    public async Task LoadTypeWithPlainTextInJsonColumn()
+    {
+        // Arrange
+        var product = new GenericJsonTestProductType
+        {
+            Name = "Legacy",
+            Identity = new ProductIdentity("900004", 1),
+
+            Text8 = "H"
+        };
+
+        var id = await _storage.SaveTypeAsync(product);
+
+        // Manipulation like older systems:
+        // Text8 just contains Plain Text
+
+        // Act / Assert
+        Assert.DoesNotThrowAsync(async () =>
+        {
+            await _storage.LoadTypeAsync(id);
+        });
+    }
+
+    /// <summary>
+    /// Should be obsolete in Moryx 12 because the double use of TEXT8-Column should be eliminated
+    /// </summary>
+    /// <returns></returns>
+    [Test(Description = "Loading a type with an empty JSON object in the JsonColumn must not fail. This reproduces the documented customer workaround using '{}'.")]
+    public async Task LoadTypeWithEmptyJsonObject()
+    {
+        // Arrange
+        var product = new TextColumnMapperTestProductType
+        {
+            Name = "EmptyJson",
+            Identity = new ProductIdentity("900004", 1)
+        };
+
+        var id = await _storage.SaveTypeAsync(product);
+
+        // simulate legacy database content
+        using (var uow = _factory.Create())
+        {
+            var repo = uow.GetRepository<IProductTypeRepository>();
+
+            var entity = repo.GetByKey(id);
+
+            entity.CurrentVersion.Text8 = "{}";
+
+            await uow.SaveChangesAsync();
+        }
+
+        // Act
+        var loaded = (TextColumnMapperTestProductType)
+            await _storage.LoadTypeAsync(id);
+
+        // Assert
+        Assert.That(loaded, Is.Not.Null);
+    }
 }

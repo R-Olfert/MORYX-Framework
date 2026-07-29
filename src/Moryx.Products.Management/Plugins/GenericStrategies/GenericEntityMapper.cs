@@ -45,24 +45,30 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
 
         var baseProperties = typeof(TBase).GetProperties().Select(p => p.Name).ToArray();
 
-        // are the any old Property configs, which use "Text8" as JSON and normal string at the same time?
+        // Legacy compatibility:
+        // Historically some configurations used the JsonColumn both as JSON storage
+        // and as a regular property mapping. This remains supported until the next
+        // major release but should no longer be generated automatically.
         if (config.PropertyConfigs.Any(pc =>
-                string.Equals(pc.PropertyName, config.JsonColumn,
+                string.Equals(
+                    pc.PropertyName,
+                    config.JsonColumn,
                     StringComparison.OrdinalIgnoreCase)))
         {
             Logger?.LogWarning(
                 "Detected a PropertyConfig for JsonColumn '{JsonColumn}'. " +
-                "The regular property mapping will be ignored.",
+                "This configuration is deprecated and may no longer be supported in a future major release.",
                 config.JsonColumn);
         }
 
         var configuredProperties = config.PropertyConfigs
             .Select(cm => cm.PropertyName)
-            .Where(p => !string.Equals(p, config.JsonColumn, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
         var readOnlyProperties = concreteType.GetProperties()
-            .Where(p => p.GetSetMethod() == null).Select(p => p.Name).ToArray();
+            .Where(p => p.GetSetMethod() == null)
+            .Select(p => p.Name)
+            .ToArray();
 
         var jsonIgnoredProperties = baseProperties
             .Concat(configuredProperties)
@@ -70,15 +76,16 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
             .ToArray();
 
         _jsonSettings = JsonSettings.Minimal
-            .Overwrite(j => j.ContractResolver = new DifferentialContractResolver<TReference>(jsonIgnoredProperties));
+            .Overwrite(j => j.ContractResolver =
+                new DifferentialContractResolver<TReference>(jsonIgnoredProperties));
 
         // Properties where no mapper should be created for: base and read only properties
         var mapperIgnoredProperties = baseProperties
-            .Concat(readOnlyProperties).ToArray();
+            .Concat(readOnlyProperties)
+            .ToArray();
 
         _configuredMappers = config.PropertyConfigs
             .Where(pc => !mapperIgnoredProperties.Contains(pc.PropertyName))
-            .Where(pc => !string.Equals(pc.PropertyName, config.JsonColumn, StringComparison.OrdinalIgnoreCase))
             .Select(pc => MapperFactory.Create(pc, concreteType))
             .ToArray();
     }
@@ -160,16 +167,22 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
             return;
         }
 
-        // JsonColumn must contain valid JSON
+        // Legacy compatibility:
+        // Older systems may contain plain text in the JsonColumn.
+        // In this case simply ignore the content and continue loading
+        // the directly mapped properties.
         var trimmed = json.Trim();
         if (!(trimmed.StartsWith("{") || trimmed.StartsWith("[")))
         {
-            throw new InvalidOperationException(
-                $"The JSON column '{_jsonAccessor.Property.Name}' contains plain text instead of JSON. " +
-                $"Value: '{json}'. This usually means the JsonColumn is also configured as a normal property mapping.");
+            Logger?.LogWarning(
+                "Ignoring non-JSON content in JsonColumn '{Column}'. Value: '{Value}'",
+                _jsonAccessor.Property.Name,
+                json);
+
+            return;
         }
 
-        // Write the remaining properties from JSON to the target object
+        // Populate remaining properties from the JsonColumn JSON payload
         try
         {
             JsonConvert.PopulateObject(json, target, _jsonSettings);
