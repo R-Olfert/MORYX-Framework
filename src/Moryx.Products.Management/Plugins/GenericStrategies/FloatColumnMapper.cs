@@ -1,10 +1,8 @@
 // Copyright (c) 2026 Phoenix Contact GmbH & Co. KG
 // Licensed under the Apache License, Version 2.0
 
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using Moryx.Container;
-using Moryx.Tools;
+
 // ReSharper disable ConvertToPrimaryConstructor
 
 namespace Moryx.Products.Management;
@@ -16,10 +14,6 @@ namespace Moryx.Products.Management;
 [Component(LifeCycle.Transient, typeof(IPropertyMapper), Name = nameof(FloatColumnMapper))]
 internal class FloatColumnMapper : ColumnMapper<double>
 {
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="targetType"></param>
     public FloatColumnMapper(Type targetType) : base(targetType)
     {
     }

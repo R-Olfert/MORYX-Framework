@@ -49,13 +49,9 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         // Historically some configurations used the JsonColumn both as JSON storage
         // and as a regular property mapping. This remains supported until the next
         // major release but should no longer be generated automatically.
-        if (config.PropertyConfigs.Any(pc =>
-                string.Equals(
-                    pc.PropertyName,
-                    config.JsonColumn,
-                    StringComparison.OrdinalIgnoreCase)))
+        if (config.PropertyConfigs.Any(pc => string.Equals(pc.PropertyName, config.JsonColumn, StringComparison.OrdinalIgnoreCase)))
         {
-            Logger?.LogWarning(
+            Logger.LogWarning(
                 "Detected a PropertyConfig for JsonColumn '{JsonColumn}'. " +
                 "This configuration is deprecated and may no longer be supported in a future major release.",
                 config.JsonColumn);
@@ -151,9 +147,6 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
     /// <inheritdoc />
     public void ReadValue(IGenericColumns source, object target)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(target);
-
         // Read all directly mapped properties
         foreach (var mapper in _configuredMappers)
         {
@@ -174,10 +167,7 @@ internal class GenericEntityMapper<TBase, TReference> : IGenericMapper
         var trimmed = json.Trim();
         if (!(trimmed.StartsWith("{") || trimmed.StartsWith("[")))
         {
-            Logger?.LogWarning(
-                "Ignoring non-JSON content in JsonColumn '{Column}'. Value: '{Value}'",
-                _jsonAccessor.Property.Name,
-                json);
+            Logger.LogWarning("Ignoring non-JSON content in JsonColumn '{Column}'. Value: '{Value}'", _jsonAccessor.Property.Name, json);
 
             return;
         }

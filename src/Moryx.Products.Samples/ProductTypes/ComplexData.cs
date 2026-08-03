@@ -9,11 +9,10 @@ namespace Moryx.Products.Samples;
 /// </summary>
 public class ComplexData
 {
-    // Property name "Name" is reserved: do not use!
-    //public string Name { get; set; }
+    //TODO: see SMAF-5082: Property 'Name' is filtered
 
     public string Content { get; set; }
-   
+
     public string PropertyName { get; set; }
 
     public int Number { get; set; }
