@@ -4,8 +4,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Net;
+using System.Net.ServerSentEvents;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +19,8 @@ using Moryx.Configuration;
 using Moryx.Runtime.Modules;
 using Moryx.Serialization;
 using Moryx.Tools;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Moryx.AbstractionLayer.Resources.Endpoints;
 
@@ -32,6 +36,16 @@ public class ResourceModificationController : ControllerBase
     private readonly IResourceManagement _resourceManagement;
     private readonly IResourceTypeTree _resourceTypeTree;
     private readonly ResourceSerialization _serialization;
+
+    private static JsonSerializerSettings CreateSerializerSettings()
+    {
+        var serializerSettings = new JsonSerializerSettings
+        {
+            ContractResolver = new CamelCasePropertyNamesContractResolver()
+        };
+        serializerSettings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter());
+        return serializerSettings;
+    }
 
     public ResourceModificationController(IResourceManagement resourceManagement,
         IResourceTypeTree resourceTypeTree,
@@ -377,5 +391,102 @@ public class ResourceModificationController : ControllerBase
 
             return true;
         }
+    }
+
+    [HttpGet("stream")]
+    [ProducesResponseType(typeof(ResourceModel), StatusCodes.Status200OK)] // TODO: kontrollieren ob typeof korrekt ist, da hier bei public async Task<...> nichts angegeben ist
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+    [Authorize(Policy = ResourcePermissions.CanView)]
+    public async Task OperationStream(CancellationToken cancellationToken)
+    {
+        var response = Response; // ein HttpResponse-Objekt, über welches SSE-Stream konfiguriert und an Client geschrieben wird
+        response.Headers["Content-Type"] = "text/event-stream"; // kennzeichnet das HttpResponse-Objekt als SSE-Stream
+
+        var operationsChannel = Channel.CreateUnbounded<SseItem<string>>(); // ein unbegrenzter Channel (Sammelstelle von Nachrichten von EventHandler an SSE-Schleife) wo immer zwei strings gespeichert werden, der erste für den Namen des SSE-Events u. der zweite für die JSON-Daten des Ereignisses
+
+        // Define event handlling
+        var addedEventHandler = new EventHandler<IResource>((_, eventArgs) => // neuer EventHandler wird mit Datentyp IResource mit den Parametern (Absender wird nicht verwendet, Daten von ausgelöstem Event) erstellt u. soll nachfolgenden Code ausführen, eventArgs ist quasi der Name des IResource Objektes
+        {
+            var id = eventArgs.Id;
+            var converter = new ResourceToModelConverter(_resourceTypeTree, _serialization);
+            var resourceModel = _resourceManagement.ReadUnsafe(id, r => converter.GetDetails(r));
+            if (resourceModel is null)
+            {
+                return; // NotFound(new MoryxExceptionResponse { Title = string.Format(Strings.ResourceNotFoundException_ById_Message, id) });
+            }
+            var json = JsonConvert.SerializeObject(resourceModel, _serializerSettings); // addedOperartion wird von C#-Objekt in Json-String umgewandelt um in den Channel geschrieben zu werden, deswegen auch String
+            operationsChannel.Writer.TryWrite(new Tuple<string, string>("Added", json)); // es wird versucht, den Namen des SSE-Events und die Daten, aus einer neu erstellten Tupel welche beides zu einer Nachricht für den Channel zusammenfasst, davon sofort in den Channel zu schreiben, danach wird ein boolscher Wert zurückgegeben ob die Nachricht angenommen wurde oder nicht
+        });
+        _resourceManagement.ResourceAdded += addedEventHandler;
+
+        var removedEventHandler = new EventHandler<IResource>((_, eventArgs) =>
+        {
+            var id = eventArgs.Id;
+            var converter = new ResourceToModelConverter(_resourceTypeTree, _serialization);
+            var resourceModel = _resourceManagement.ReadUnsafe(id, r => converter.GetDetails(r));
+            if (resourceModel is null)
+            {
+                return; // NotFound(new MoryxExceptionResponse { Title = string.Format(Strings.ResourceNotFoundException_ById_Message, id) });
+            }
+            var json = JsonConvert.SerializeObject(resourceModel, _serializerSettings);
+            operationsChannel.Writer.TryWrite(new Tuple<string, string>("Removed", json));
+        });
+        _resourceManagement.ResourceRemoved += removedEventHandler;
+
+        var changedEventHandler = new EventHandler<IResource>((_, eventArgs) =>
+        {
+            var id = eventArgs.Id;
+            var converter = new ResourceToModelConverter(_resourceTypeTree, _serialization);
+            var resourceModel = _resourceManagement.ReadUnsafe(id, r => converter.GetDetails(r));
+            if (resourceModel is null)
+            {
+                return; // NotFound(new MoryxExceptionResponse { Title = string.Format(Strings.ResourceNotFoundException_ById_Message, id) });
+            }
+            var json = JsonConvert.SerializeObject(resourceModel, _serializerSettings); // addedOperartion wird von C#-Objekt in Json-String umgewandelt um in den Channel geschrieben zu werden, deswegen auch String
+            operationsChannel.Writer.TryWrite(new Tuple<string, string>("Changed", json)); // es wird versucht, den Namen des SSE-Events und die Daten, aus einer neu erstellten Tupel welche beides zu einer Nachricht für den Channel zusammenfasst, davon sofort in den Channel zu schreiben, danach wird ein boolscher Wert zurückgegeben ob die Nachricht angenommen wurde oder nicht
+        });
+        _resourceManagement.ResourceChanged += changedEventHandler;
+
+        // folgendes Event CapabilitiesChanged braucht man erstmal nicht
+        //var capaeventhandler = new eventhandler<icapabilities>((_, eventargs) =>
+        //{
+        //    var capaoperation = new
+        //    {
+        //        resourcemodel = converter.tomodel(eventargs.operation);
+        //};
+        //var json = jsonconvert.serializeobject(capaoperation, _serializersettings);
+        //operationschannel.writer.trywrite(new tuple<string, string>(nameof(operationtypes.update), json));
+        //        });
+        //_resourcemanagement.capabilitieschanged += capaeventhandler;
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested) // solange kein Abbruch gefordert, also canelationToken=false
+            {
+                var changes = await operationsChannel.Reader.ReadAsync(cancellationToken); // auf neue Nachricht im Channel warten u. diese dann lesen
+
+                await response.WriteAsync($"event: {changes.Item1}\n", cancellationToken); // Namen von SSE-Event in HttpResponse-Objekt reinschreiben/darüber fortlaufend senden ohne dass es sofort wieder gelschlossen wird, cancellationToken ermöglicht den Abbruch
+                await response.WriteAsync($"data: {changes.Item2}\r\n", cancellationToken); // JSON-Daten von SSE-Event in HttpResponse-Objekt reinschreiben/darüber fortlaufend senden ohne dass es sofort wieder gelschlossen wird, cancellationToken ermöglicht den Abbruch
+            }
+        }
+        // Fehler werden nicht behandelt
+        catch (OperationCanceledException) // Fehler typischerweise durch Abbruch von CancellationToken
+        { }
+        catch (ChannelClosedException) // Fehler typischerweise, wenn Channel geschlossen wurde, aber noch daraus gelesen werden soll
+        { }
+        catch (InvalidCastException) // Fehler typischerweise, wenn Typumnwandlung ungültig ist
+        { }
+        finally
+        {
+            // Events abmelden
+            _resourceManagement.ResourceAdded -= addedEventHandler;
+            _resourceManagement.ResourceRemoved -= removedEventHandler;
+            _resourceManagement.ResourceChanged -= changedEventHandler;
+            // _resourceManagement.CapabilitiesChanged -= capaEventHandler;
+
+            operationsChannel.Writer.TryComplete(); // beendet das Schreiben in den Channel
+        }
+
+        await response.CompleteAsync(); // schließt SSE-Stream ordentlich
     }
 }
