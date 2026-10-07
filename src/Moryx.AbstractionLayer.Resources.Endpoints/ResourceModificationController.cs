@@ -37,6 +37,7 @@ public class ResourceModificationController : ControllerBase
     private readonly IResourceTypeTree _resourceTypeTree;
     private readonly ResourceSerialization _serialization;
 
+    private static readonly JsonSerializerSettings _serializerSettings = CreateSerializerSettings();
     private static JsonSerializerSettings CreateSerializerSettings()
     {
         var serializerSettings = new JsonSerializerSettings
