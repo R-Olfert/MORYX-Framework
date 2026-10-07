@@ -396,7 +396,7 @@ public class ResourceModificationController : ControllerBase
     [HttpGet("stream")]
     [ProducesResponseType(typeof(ResourceModel), StatusCodes.Status200OK)] // TODO: kontrollieren ob typeof korrekt ist, da hier bei public async Task<...> nichts angegeben ist
     [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-    [Authorize(Policy = ResourcePermissions.CanView)]
+    [Authorize(Policy = ResourcePermissions.CanDelete)]
     public async Task OperationStream(CancellationToken cancellationToken)
     {
         var response = Response; // ein HttpResponse-Objekt, über welches SSE-Stream konfiguriert und an Client geschrieben wird
