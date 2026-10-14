@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Phoenix Contact GmbH & Co. KG
 // Licensed under the Apache License, Version 2.0
 
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.Data;
 using System.Globalization;
@@ -9,6 +10,8 @@ using System.Net.ServerSentEvents;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using System.Threading.Tasks.Dataflow;
 using Microsoft.AspNetCore.Authorization;
@@ -50,6 +53,12 @@ public class ResourceModificationController : ControllerBase
         serializerSettings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter());
         return serializerSettings;
     }
+    //private static readonly JsonSerializerOptions _serializerOptions = new()
+    //{
+    //    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    //    Converters = { new JsonStringEnumConverter() }
+    //};
+    //private readonly Converter _converter;
 
     public ResourceModificationController(IResourceManagement resourceManagement,
         IResourceTypeTree resourceTypeTree,
@@ -60,6 +69,10 @@ public class ResourceModificationController : ControllerBase
         _resourceTypeTree = resourceTypeTree ?? throw new ArgumentNullException(nameof(resourceTypeTree));
         var module = moduleManager.AllModules.FirstOrDefault(module => module is IFacadeContainer<IResourceManagement>);
         _serialization = new ResourceSerialization(module.Container, serviceProvider);
+        //_converter = new Converter(new PossibleValuesSerialization(
+        //    moduleManager.AllModules.FirstOrDefault(module =>
+        //        module is IFacadeContainer<IResourceManagement>)?.Container, serviceProvider,
+        //    new EmptyValueProvider()));
     }
 
     [HttpGet]
@@ -417,6 +430,14 @@ public class ResourceModificationController : ControllerBase
         EventHandler<IResource> changedEventHandler = (_, eventArgs) =>
             Broadcast();
 
+        EventHandler<bool> stateChangedEventHandler = (_, ready) =>
+        {
+            if (ready)
+            {
+                Broadcast();
+            }
+        };
+
         try
         {
             var result = TypedResults.ServerSentEvents(Subscribe(cancellationToken));
@@ -425,7 +446,7 @@ public class ResourceModificationController : ControllerBase
             _resourceManagement.ResourceChanged += changedEventHandler;
             if (_resourceManagement is ILifeCycleBoundFacade lf)
             {
-                lf.StateChanged += statechangedEventHandler;
+                lf.StateChanged += stateChangedEventHandler;
             }
             await result.ExecuteAsync(HttpContext);
         }
@@ -440,28 +461,28 @@ public class ResourceModificationController : ControllerBase
             _resourceManagement.ResourceChanged -= changedEventHandler;
             if (_resourceManagement is ILifeCycleBoundFacade lf)
             {
-                lf.StateChanged -= statechangedEventHandler;
+                lf.StateChanged -= stateChangedEventHandler;
             }
         }
         return;
 
-        async IAsyncEnumerable<string> Subscribe([EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            ResourceModell[] initialResources = [];
-            try
-            {
-                initialResources = _resourceManagement.GetResources().Select(_converter.ToModel).ToArray(); // _converter müsste oben doch deklariert werden
-            }
-            catch (HealthStateException)
-            {
-                // ignore
-            }
-            yield return new SseItem<string>(JsonSerializer.Serialize(initialResources, _serializerOptions)); // _serializerOptions müssen oben noch deklariert werden
-            await foreach (var data in channel.Reader.ReadAllAsync(cancelToken))
-            {
-                yield return new SseItem<string>(data);
-            }
-        }
+        //async IAsyncEnumerable<string> Subscribe([EnumeratorCancellation] CancellationToken cancellationToken)
+        //{
+        //    ResourceModell[] initialResources = [];
+        //    try
+        //    {
+        //        initialResources = _resourceManagement.GetResources().Select(_converter.ToModel).ToArray(); // _converter müsste oben doch deklariert werden
+        //    }
+        //    catch (HealthStateException)
+        //    {
+        //        // ignore
+        //    }
+        //    yield return new SseItem<string>(JsonSerializer.Serialize(initialResources, _serializerOptions)); // _serializerOptions müssen oben noch deklariert werden
+        //    await foreach (var data in channel.Reader.ReadAllAsync(cancelToken))
+        //    {
+        //        yield return new SseItem<string>(data);
+        //    }
+        //}
 
         void Broadcast()
         {
@@ -524,34 +545,34 @@ public class ResourceModificationController : ControllerBase
         //        });
         //_resourcemanagement.capabilitieschanged += capaeventhandler;
 
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested) // solange kein Abbruch gefordert, also canelationToken=false
-            {
-                var changes = await channel.Reader.ReadAsync(cancellationToken); // auf neue Nachricht im Channel warten u. diese dann lesen
+        //try
+        //{
+        //    while (!cancellationToken.IsCancellationRequested) // solange kein Abbruch gefordert, also canelationToken=false
+        //    {
+        //        var changes = await channel.Reader.ReadAsync(cancellationToken); // auf neue Nachricht im Channel warten u. diese dann lesen
 
-                await response.WriteAsync($"event: {changes.Item1}\n", cancellationToken); // Namen von SSE-Event in HttpResponse-Objekt reinschreiben/darüber fortlaufend senden ohne dass es sofort wieder gelschlossen wird, cancellationToken ermöglicht den Abbruch
-                await response.WriteAsync($"data: {changes.Item2}\r\n", cancellationToken); // JSON-Daten von SSE-Event in HttpResponse-Objekt reinschreiben/darüber fortlaufend senden ohne dass es sofort wieder gelschlossen wird, cancellationToken ermöglicht den Abbruch
-            }
-        }
-        // Fehler werden nicht behandelt
-        catch (OperationCanceledException) // Fehler typischerweise durch Abbruch von CancellationToken
-        { }
-        catch (ChannelClosedException) // Fehler typischerweise, wenn Channel geschlossen wurde, aber noch daraus gelesen werden soll
-        { }
-        catch (InvalidCastException) // Fehler typischerweise, wenn Typumnwandlung ungültig ist
-        { }
-        finally
-        {
-            // Events abmelden
-            _resourceManagement.ResourceAdded -= addedEventHandler;
-            _resourceManagement.ResourceRemoved -= removedEventHandler;
-            _resourceManagement.ResourceChanged -= changedEventHandler;
-            // _resourceManagement.CapabilitiesChanged -= capaEventHandler;
+        //        await response.WriteAsync($"event: {changes.Item1}\n", cancellationToken); // Namen von SSE-Event in HttpResponse-Objekt reinschreiben/darüber fortlaufend senden ohne dass es sofort wieder gelschlossen wird, cancellationToken ermöglicht den Abbruch
+        //        await response.WriteAsync($"data: {changes.Item2}\r\n", cancellationToken); // JSON-Daten von SSE-Event in HttpResponse-Objekt reinschreiben/darüber fortlaufend senden ohne dass es sofort wieder gelschlossen wird, cancellationToken ermöglicht den Abbruch
+        //    }
+        //}
+        //// Fehler werden nicht behandelt
+        //catch (OperationCanceledException) // Fehler typischerweise durch Abbruch von CancellationToken
+        //{ }
+        //catch (ChannelClosedException) // Fehler typischerweise, wenn Channel geschlossen wurde, aber noch daraus gelesen werden soll
+        //{ }
+        //catch (InvalidCastException) // Fehler typischerweise, wenn Typumnwandlung ungültig ist
+        //{ }
+        //finally
+        //{
+        //    // Events abmelden
+        //    _resourceManagement.ResourceAdded -= addedEventHandler;
+        //    _resourceManagement.ResourceRemoved -= removedEventHandler;
+        //    _resourceManagement.ResourceChanged -= changedEventHandler;
+        //    // _resourceManagement.CapabilitiesChanged -= capaEventHandler;
 
-            channel.Writer.TryComplete(); // beendet das Schreiben in den Channel
-        }
+        //    channel.Writer.TryComplete(); // beendet das Schreiben in den Channel
+        //}
 
-        await response.CompleteAsync(); // schließt SSE-Stream ordentlich
+        //await response.CompleteAsync(); // schließt SSE-Stream ordentlich
     }
 }
