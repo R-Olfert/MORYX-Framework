@@ -4,6 +4,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Data;
+using System.Diagnostics.Tracing;
 using System.Globalization;
 using System.Net;
 using System.Net.ServerSentEvents;
@@ -440,7 +441,7 @@ public class ResourceModificationController : ControllerBase
 
         try
         {
-            var result = TypedResults.ServerSentEvents(Subscribe(cancellationToken));
+            var result = TypedResults.ServerSentEvents(channel.Reader.ReadAllAsync(cancellationToken)); // hier wird auf neue Nachrichten gewartet(->Async.) um diese dann weiterzugeben, mit cancelationToken kann das ganze geschlossen werden sodass nicht mehr gewartet wird
             _resourceManagement.ResourceAdded += addedEventHandler;
             _resourceManagement.ResourceRemoved += removedEventHandler;
             _resourceManagement.ResourceChanged += changedEventHandler;
@@ -486,6 +487,16 @@ public class ResourceModificationController : ControllerBase
 
         void Broadcast()
         {
+            var id = eventArgs.Id;
+            var converter = new resourcetomodelconverter(_resourcetypetree, _serialization);
+            var resourcemodel = _resourcemanagement.readunsafe(id, r => converter.getdetails(r));
+            if (resourcemodel is null)
+            {
+                return; // notfound(new moryxexceptionresponse { title = string.format(strings.resourcenotfoundexception_byid_message, id) });
+            }
+            var json = jsonconvert.serializeobject(resourcemodel, _serializersettings); // addedoperartion wird von c#-objekt in json-string umgewandelt um in den channel geschrieben zu werden, deswegen auch string
+            channel.writer.trywrite(new tuple<string, string>("added", json)); // es wird versucht, den namen des sse-events und die daten, aus einer neu erstellten tupel welche beides zu einer nachricht für den channel zusammenfasst, davon sofort in den channel zu schreiben, danach wird ein boolscher wert zurückgegeben ob die nachricht angenommen wurde oder nicht
+
             var modifications = _resourceManagement.GetResources().Select(_converter.ToModel).ToArray();
             channel.Writer.TryWrite(JsonSerializer.Seralize(modifications, _serializerOptions));
         }
