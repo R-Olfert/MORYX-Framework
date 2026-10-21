@@ -44,6 +44,13 @@ public class ResourceModificationController : ControllerBase
     private readonly IResourceTypeTree _resourceTypeTree;
     private readonly ResourceSerialization _serialization;
 
+    //private static readonly JsonSerializerOptions _serializerOptions = new()
+    //{
+    //    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    //    Converters = { new JsonStringEnumConverter() }
+    //};
+    //private static readonly Convert _convert;
+
     private static readonly JsonSerializerSettings _serializerSettings = CreateSerializerSettings();
     private static JsonSerializerSettings CreateSerializerSettings()
     {
@@ -54,12 +61,6 @@ public class ResourceModificationController : ControllerBase
         serializerSettings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter());
         return serializerSettings;
     }
-    //private static readonly JsonSerializerOptions _serializerOptions = new()
-    //{
-    //    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    //    Converters = { new JsonStringEnumConverter() }
-    //};
-    //private readonly Converter _converter;
 
     public ResourceModificationController(IResourceManagement resourceManagement,
         IResourceTypeTree resourceTypeTree,
@@ -420,22 +421,25 @@ public class ResourceModificationController : ControllerBase
         var response = Response; // ein HttpResponse-Objekt, über welches SSE-Stream konfiguriert und an Client geschrieben wird
         response.Headers["Content-Type"] = "text/event-stream"; // kennzeichnet das HttpResponse-Objekt als SSE-Stream
 
-        var channel = Channel.CreateUnbounded<SseItem<string>>(); // ein unbegrenzter Channel (Sammelstelle von Nachrichten von EventHandler an SSE-Schleife) wo immer zwei strings gespeichert werden, der erste für den Namen des SSE-Events u. der zweite für die JSON-Daten des Ereignisses
+        // var channel = Channel.CreateUnbounded<SseItem<string>>(); // ein unbegrenzter Channel (Sammelstelle von Nachrichten von EventHandler an SSE-Schleife) wo immer zwei strings gespeichert werden, der erste für den Namen des SSE-Events u. der zweite für die JSON-Daten des Ereignisses
+        var channel = Channel.CreateUnbounded<Tuple<string, string>>();
 
         EventHandler<IResource> addedEventHandler = (_, eventArgs) =>
-            Broadcast();
+            Broadcast(eventArgs, "Added");
 
         EventHandler<IResource> removedEventHandler = (_, eventArgs) =>
-            Broadcast();
+            Broadcast(eventArgs, "Removed");
 
         EventHandler<IResource> changedEventHandler = (_, eventArgs) =>
-            Broadcast();
+            Broadcast(eventArgs, "Changed");
 
         EventHandler<bool> stateChangedEventHandler = (_, ready) =>
         {
             if (ready)
             {
-                Broadcast();
+                var json = JsonConvert.SerializeObject(ready, _serializerSettings);
+                channel.Writer.TryWrite(new Tuple<string, string>("StateChanged", json));
+                //Broadcast(ready, "StateChanged");
             }
         };
 
@@ -485,20 +489,21 @@ public class ResourceModificationController : ControllerBase
         //    }
         //}
 
-        void Broadcast()
+        void Broadcast(IResource eventArgs, string eventName)
         {
             var id = eventArgs.Id;
-            var converter = new resourcetomodelconverter(_resourcetypetree, _serialization);
-            var resourcemodel = _resourcemanagement.readunsafe(id, r => converter.getdetails(r));
-            if (resourcemodel is null)
+            var converter = new ResourceToModelConverter(_resourceTypeTree, _serialization);
+            var resourceModel = _resourceManagement.ReadUnsafe(id, converter.GetDetails);
+            if (resourceModel is null)
             {
                 return; // notfound(new moryxexceptionresponse { title = string.format(strings.resourcenotfoundexception_byid_message, id) });
             }
-            var json = jsonconvert.serializeobject(resourcemodel, _serializersettings); // addedoperartion wird von c#-objekt in json-string umgewandelt um in den channel geschrieben zu werden, deswegen auch string
-            channel.writer.trywrite(new tuple<string, string>("added", json)); // es wird versucht, den namen des sse-events und die daten, aus einer neu erstellten tupel welche beides zu einer nachricht für den channel zusammenfasst, davon sofort in den channel zu schreiben, danach wird ein boolscher wert zurückgegeben ob die nachricht angenommen wurde oder nicht
+            var json = JsonConvert.SerializeObject(resourceModel, _serializerSettings); 
+            channel.Writer.TryWrite(new Tuple<string, string>(eventName , json));
 
-            var modifications = _resourceManagement.GetResources().Select(_converter.ToModel).ToArray();
-            channel.Writer.TryWrite(JsonSerializer.Seralize(modifications, _serializerOptions));
+            //var modifications = _resourcemanagement.getresources<iresource>().select(_converter.tomodel).toarray();
+            //var modifications = _resourcemanagement.readunsafe(id, r => converter.getdetails(r));
+            //channel.writer.trywrite(jsonserializer.serialize(modifications, _serializeroptions));
         }
 
         // Define event handlling
